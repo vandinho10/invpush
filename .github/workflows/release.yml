@@ -1,0 +1,85 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux: containers debian:bookworm-slim por arquitetura (libcurl dinamico)
+          - arch: x86_64
+            mode: linux
+            platform: linux/amd64
+          - arch: aarch64
+            mode: linux
+            platform: linux/arm64
+          - arch: arm32
+            mode: linux
+            platform: linux/arm/v7
+          # Windows: cross-compile mingw-w64, binario 100% estatico (WinHTTP)
+          - arch: windows-amd64
+            mode: mingw
+            cxx: x86_64-w64-mingw32-g++
+          - arch: windows-x86
+            mode: mingw
+            cxx: i686-w64-mingw32-g++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.mode == 'linux'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build Linux (${{ matrix.arch }})
+        if: matrix.mode == 'linux'
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$(pwd):/src" -w /src \
+            debian:bookworm-slim \
+            bash -c '
+              apt-get update -qq &&
+              apt-get install -y -qq g++ make libcurl4-openssl-dev > /dev/null 2>&1 &&
+              make all &&
+              cp invpush /src/invpush-linux-${{ matrix.arch }}
+            '
+          ls -lh invpush-linux-${{ matrix.arch }}
+
+      - name: Build Windows (${{ matrix.arch }})
+        if: matrix.mode == 'mingw'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-mingw-w64 > /dev/null 2>&1
+          # ld PE acrescenta .exe ao -o sem extensao
+          make TARGET_OS=Windows_NT CXX=${{ matrix.cxx }}-posix all
+          cp invpush.exe invpush-${{ matrix.arch }}.exe
+          ls -lh invpush-${{ matrix.arch }}.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: invpush-${{ matrix.arch }}
+          path: |
+            invpush-linux-*
+            invpush-windows-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

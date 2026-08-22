@@ -1,0 +1,25 @@
+# Binários compilados
+/invpush
+invpush-linux-x86_64
+
+# Binários de teste
+tests/test_runner
+tests/test_runner_san
+
+# Arquivos de objeto
+*.o
+
+# Configuração local com segredos (nunca commitar)
+.env
+*.token
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+
+# Pastas de IDEs/Editores
+.vscode/
+.idea/
+
+# Binarios de release (gerados pelo CI)
+*.exe
