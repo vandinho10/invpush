@@ -34,9 +34,9 @@ make              # build de release (otimizado)
 Compilação manual:
 
 ```bash
-g++ -std=c++17 -O2 -o invpush main.cpp invpush.cpp -lcurl          # Linux
+g++ -std=c++17 -O2 -o invpush main.cpp invpush.cpp config.cpp -lcurl          # Linux
 x86_64-w64-mingw32-g++ -std=c++17 -O2 -static -o invpush.exe \
-  main.cpp invpush.cpp -lwinhttp -liphlpapi -lws2_32               # Windows
+  main.cpp invpush.cpp config.cpp -lwinhttp -liphlpapi -lws2_32               # Windows
 ```
 
 ## Verificação, Testes e Sanitizers
@@ -69,6 +69,43 @@ Opções principais:
 | `--print` | — | Imprime o JSON coletado sem enviar |
 | `--nao-verificar-tls` | verificação ativa | Desabilita validade do certificado |
 | `-d/--debug`, `-q/--quiet` | — | Verbosidade |
+
+## Configuração Persistente
+
+Salve suas preferências uma vez e rode `invpush` sem flags — no estilo do
+`git config`.
+
+```bash
+# Global (padrão): vale para qualquer diretório
+invpush config set url https://api.vandinho.com.br/api/inventory/report
+invpush config set token <INVENTORY_COLLECTION_API_TOKEN>
+invpush config set janela-boot 600
+invpush config list                 # visão efetiva com origem [global]/[local]
+invpush config get timeout          # imprime os valores da chave
+invpush config unset token          # remove a chave
+invpush config path                 # mostra os caminhos global e local
+
+# Local: grava ./.invpush.conf no projeto atual (commitável)
+invpush config --local set maquina NB-01
+```
+
+**Precedência:** linha de comando > `.invpush.conf` local > config global >
+variáveis de ambiente (`INVENTORY_API_URL`, `INVENTORY_COLLECTION_API_TOKEN`) >
+padrões. Opções não informadas na CLI são preenchidas pela config — adotar a
+config não quebra deploys existentes baseados em env.
+
+Chaves aceitas: `url`, `token`, `maquina`, `ip-publico`, `timeout`,
+`janela-boot`, `verificar-tls`. O token é gravado em texto puro (mesmo modelo
+do `git credentials`) — proteja o arquivo com permissões adequadas.
+
+Formato do arquivo (`chave=valor`, uma linha por valor):
+
+```ini
+# ~/.config/invpush/config
+url=https://api.vandinho.com.br/api/inventory/report
+token=<INVENTORY_COLLECTION_API_TOKEN>
+timeout=10
+```
 
 ## Payload enviado
 

@@ -1026,34 +1026,40 @@ bool parse_args(int argc, char *argv[], Config &cfg)
             const char *v = proximo(i);
             if (v == nullptr) return false;
             cfg.url = v;
+            cfg.cli_url = true;
         }
         else if (arg == "--token")
         {
             const char *v = proximo(i);
             if (v == nullptr) return false;
             cfg.token = v;
+            cfg.cli_token = true;
         }
         else if (arg == "--maquina")
         {
             const char *v = proximo(i);
             if (v == nullptr) return false;
             cfg.maquina = v;
+            cfg.cli_maquina = true;
         }
         else if (arg == "--timeout")
         {
             const char *v = proximo(i);
             if (v == nullptr || !numero(v, cfg.timeout_s)) return false;
+            cfg.cli_timeout = true;
         }
         else if (arg == "--janela-boot")
         {
             const char *v = proximo(i);
             if (v == nullptr || !numero(v, cfg.janela_boot_s)) return false;
+            cfg.cli_janela_boot = true;
         }
         else if (arg == "--ip-publico")
         {
             const char *v = proximo(i);
             if (v == nullptr) return false;
             cfg.ip_publico_fixo = v;
+            cfg.cli_ip_publico = true;
         }
         else if (arg == "--print")
         {
@@ -1062,6 +1068,7 @@ bool parse_args(int argc, char *argv[], Config &cfg)
         else if (arg == "--nao-verificar-tls")
         {
             cfg.verificar_tls = false;
+            cfg.cli_verificar_tls = true;
         }
         else if (arg == "-q" || arg == "--quiet")
         {
