@@ -152,6 +152,327 @@ TEST("montar_payload produz contrato host_inventory")
     CHECK(escapado.find("\"maquina\":\"MA\\\"QUINA\"") != std::string::npos);
 }
 
+// --- configuração persistente ------------------------------------------------
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <sstream>
+
+namespace fs = std::filesystem;
+
+struct TempDirCfg
+{
+    fs::path dir;
+    TempDirCfg()
+    {
+        const auto tick =
+            std::chrono::steady_clock::now().time_since_epoch().count();
+        dir = fs::temp_directory_path() / ("invpush_test_tmp_" + std::to_string(tick));
+        fs::create_directories(dir);
+    }
+    ~TempDirCfg() { std::error_code ec; fs::remove_all(dir, ec); }
+};
+
+static void escrever_cfg(const fs::path &p, const std::string &conteudo)
+{
+    std::ofstream f(p);
+    f << conteudo;
+}
+
+static int rodar_config(std::vector<std::string> args)
+{
+    std::vector<char *> argv;
+    argv.push_back(const_cast<char *>("invpush"));
+    for (auto &s : args)
+        argv.push_back(const_cast<char *>(s.c_str()));
+    return comando_config(static_cast<int>(argv.size()), argv.data());
+}
+
+TEST("NivelConfig: define/busca/acrescenta/remove")
+{
+    NivelConfig n;
+    CHECK(n.vazia());
+    CHECK(n.busca("url") == nullptr);
+
+    n.define("url", {"https://api.exemplo"});
+    CHECK(!n.vazia());
+    const auto *u = n.busca("url");
+    CHECK(u != nullptr);
+    if (u == nullptr)
+        return;
+    CHECK(u->size() == 1 && (*u)[0] == "https://api.exemplo");
+
+    n.acrescenta("token", {"abc"});
+    n.define("url", {"https://outro"});
+    u = n.busca("url");
+    if (u != nullptr)
+        CHECK(u->size() == 1 && (*u)[0] == "https://outro");
+
+    n.remove("url");
+    n.remove("inexistente"); // sem efeito
+    CHECK(n.busca("url") == nullptr);
+}
+
+TEST("chave_valida aceita exatamente as 7 chaves")
+{
+    CHECK(chave_valida("url"));
+    CHECK(chave_valida("token"));
+    CHECK(chave_valida("maquina"));
+    CHECK(chave_valida("ip-publico"));
+    CHECK(chave_valida("timeout"));
+    CHECK(chave_valida("janela-boot"));
+    CHECK(chave_valida("verificar-tls"));
+    CHECK(!chave_valida("outra"));
+    CHECK(!chave_valida(""));
+}
+
+TEST("valor_bool interpreta variantes e cai no padrao")
+{
+    CHECK(valor_bool("true", false));
+    CHECK(valor_bool("TRUE", false));
+    CHECK(valor_bool(" 1 ", true));
+    CHECK(valor_bool("sim", false));
+    CHECK(!valor_bool("false", true));
+    CHECK(!valor_bool("off", true));
+    CHECK(!valor_bool("nao", true));
+    CHECK(valor_bool("lixo", true));   // padrão
+    CHECK(!valor_bool("lixo", false)); // padrão
+}
+
+TEST("caminho_config_global respeita INVPUSH_CONFIG_HOME")
+{
+#ifdef _WIN32
+    _putenv_s("INVPUSH_CONFIG_HOME", "C:\\sandbox");
+#else
+    setenv("INVPUSH_CONFIG_HOME", "/sandbox", 1);
+#endif
+    const fs::path p = caminho_config_global();
+#ifdef _WIN32
+    CHECK(p == fs::path("C:\\sandbox") / "invpush" / "config.txt");
+#else
+    CHECK(p == fs::path("/sandbox") / "invpush" / "config");
+#endif
+#ifdef _WIN32
+    _putenv_s("INVPUSH_CONFIG_HOME", "");
+#else
+    unsetenv("INVPUSH_CONFIG_HOME");
+#endif
+}
+
+TEST("descobrir_config_local sobe a hierarquia ate encontrar .invpush.conf")
+{
+    TempDirCfg raiz;
+    fs::create_directories(raiz.dir / "a" / "b");
+    escrever_cfg(raiz.dir / ".invpush.conf", "timeout=20\n");
+
+    CHECK(!descobrir_config_local(raiz.dir / "a" / "b").empty());
+    CHECK(descobrir_config_local(raiz.dir / "a" / "b").filename() == ".invpush.conf");
+    CHECK(descobrir_config_local(raiz.dir).filename() == ".invpush.conf");
+
+    TempDirCfg sem_config;
+    CHECK(descobrir_config_local(sem_config.dir).empty());
+}
+
+TEST("carregar_nivel: formato chave=valor, comentarios e lixo ignorado")
+{
+    TempDirCfg td;
+    escrever_cfg(td.dir / "cfg",
+                 "# comentario\n"
+                 "\n"
+                 "timeout=45\n"
+                 " maquina = SERVIDOR-X \n"
+                 "sem-igual\n"
+                 "desconhecida=x\n"
+                 "verificar-tls=false\n");
+
+    std::ostringstream vazio;
+    auto *antigo = std::cerr.rdbuf(vazio.rdbuf());
+    const NivelConfig n = carregar_nivel(td.dir / "cfg");
+    std::cerr.rdbuf(antigo);
+
+    const auto *t = n.busca("timeout");
+    CHECK(t != nullptr);
+    if (t == nullptr)
+        return;
+    CHECK((*t)[0] == "45");
+
+    const auto *m = n.busca("maquina");
+    CHECK(m != nullptr);
+    if (m == nullptr)
+        return;
+    CHECK((*m)[0] == "SERVIDOR-X");
+
+    CHECK(n.busca("desconhecida") == nullptr);
+    const auto *v = n.busca("verificar-tls");
+    CHECK(v != nullptr);
+    if (v != nullptr)
+        CHECK(valor_bool((*v)[0], true) == false);
+}
+
+TEST("salvar/carregar roundtrip deterministico com valor contendo '='")
+{
+    TempDirCfg td;
+    NivelConfig n;
+    n.define("url", {"https://api/?a=b"});
+    n.define("token", {"tok=en"});
+    CHECK(salvar_nivel(td.dir / "cfg", n));
+
+    std::ifstream in(td.dir / "cfg");
+    const std::string bruto((std::istreambuf_iterator<char>(in)),
+                            std::istreambuf_iterator<char>());
+    CHECK(bruto.find("token=tok=en") != std::string::npos); // split no primeiro '='
+    CHECK(bruto.find("# invpush") != std::string::npos);
+    CHECK(bruto.find("texto puro") != std::string::npos);   // aviso do token
+
+    const NivelConfig lido = carregar_nivel(td.dir / "cfg");
+    const auto *tok = lido.busca("token");
+    CHECK(tok != nullptr);
+    if (tok == nullptr)
+        return;
+    CHECK((*tok)[0] == "tok=en"); // split no primeiro '=' preserva o resto
+    // ordem alfabética: token antes de url
+    CHECK(bruto.find("token=") < bruto.find("url="));
+}
+
+TEST("mesclar_niveis: local sobrepoe global por chave inteira")
+{
+    NivelConfig g, l;
+    g.define("url", {"https://global"});
+    g.define("timeout", {"10"});
+    l.define("url", {"https://local"});
+
+    const NivelConfig m = mesclar_niveis(g, l);
+    const auto *u = m.busca("url");
+    CHECK(u != nullptr);
+    if (u == nullptr)
+        return;
+    CHECK(u->size() == 1 && (*u)[0] == "https://local");
+    const auto *t = m.busca("timeout");
+    CHECK(t != nullptr);
+    if (t == nullptr)
+        return;
+    CHECK((*t)[0] == "10");
+}
+
+TEST("aplicar_config: preenche apenas opcoes ausentes na CLI")
+{
+    Config cfg = {};
+    cfg.timeout_s = 10;
+    cfg.janela_boot_s = 300;
+    cfg.verificar_tls = true;
+
+    char *argv[] = {const_cast<char *>("invpush"),
+                    const_cast<char *>("--url"), const_cast<char *>("https://cli"),
+                    const_cast<char *>("--nao-verificar-tls")};
+    CHECK(parse_args(4, argv, cfg));
+
+    NivelConfig efetivo;
+    efetivo.define("url", {"https://da-config"});      // ignorado: CLI vence
+    efetivo.define("token", {"tok-config"});           // aplicado
+    efetivo.define("maquina", {"HOST-CFG"});           // aplicado
+    efetivo.define("timeout", {"60"});                 // aplicado
+    efetivo.define("janela-boot", {"120"});            // aplicado
+    efetivo.define("verificar-tls", {"true"});         // ignorado: CLI vence
+    aplicar_config(cfg, efetivo);
+
+    CHECK(cfg.url == "https://cli" && cfg.cli_url);
+    CHECK(cfg.token == "tok-config");
+    CHECK(cfg.maquina == "HOST-CFG");
+    CHECK(cfg.timeout_s == 60);
+    CHECK(cfg.janela_boot_s == 120);
+    CHECK(cfg.verificar_tls == false); // flag da CLI permanece
+}
+
+TEST("aplicar_config: timeout/janela invalidos na config sao ignorados com aviso")
+{
+    Config cfg = {};
+    cfg.timeout_s = 10;
+    cfg.janela_boot_s = 300;
+    cfg.verificar_tls = true;
+
+    NivelConfig efetivo;
+    efetivo.define("timeout", {"abc"});
+    efetivo.define("janela-boot", {"-7"});
+
+    std::ostringstream vazio;
+    auto *antigo = std::cerr.rdbuf(vazio.rdbuf());
+    aplicar_config(cfg, efetivo);
+    std::cerr.rdbuf(antigo);
+
+    CHECK(cfg.timeout_s == 10);     // mantém o padrão
+    CHECK(cfg.janela_boot_s == 300);
+}
+
+TEST("comando_config: ciclo set -> get -> list -> unset em escopo global sandbox")
+{
+#ifdef _WIN32
+    TempDirCfg td;
+    std::string home = td.dir.string();
+    _putenv_s("INVPUSH_CONFIG_HOME", home.c_str());
+#else
+    TempDirCfg td;
+    setenv("INVPUSH_CONFIG_HOME", td.dir.string().c_str(), 1);
+#endif
+
+    CHECK(rodar_config({"config", "set", "url", "https://api.local"}) == EXIT_SUCCESS);
+    CHECK(fs::exists(caminho_config_global()));
+
+    CHECK(rodar_config({"config", "get", "url"}) == EXIT_SUCCESS);
+    CHECK(rodar_config({"config", "list"}) == EXIT_SUCCESS);
+    CHECK(rodar_config({"config", "path"}) == EXIT_SUCCESS);
+    CHECK(rodar_config({"config", "get", "inexistente"}) == EXIT_FAILURE);
+    CHECK(rodar_config({"config", "set", "chave_mala", "x"}) == EXIT_FAILURE);
+    CHECK(rodar_config({"config", "verbo_falso"}) == EXIT_FAILURE);
+
+    CHECK(rodar_config({"config", "unset", "url"}) == EXIT_SUCCESS);
+    CHECK(rodar_config({"config", "get", "url"}) == EXIT_FAILURE);
+
+#ifdef _WIN32
+    _putenv_s("INVPUSH_CONFIG_HOME", "");
+#else
+    unsetenv("INVPUSH_CONFIG_HOME");
+#endif
+}
+
+TEST("comando_config: --local grava ./.invpush.conf no diretorio atual")
+{
+#ifdef _WIN32
+    TempDirCfg td;
+    std::string home = td.dir.string();
+    _putenv_s("INVPUSH_CONFIG_HOME", home.c_str());
+#else
+    TempDirCfg td;
+    setenv("INVPUSH_CONFIG_HOME", td.dir.string().c_str(), 1);
+#endif
+
+    const fs::path original = fs::current_path();
+    std::error_code ec;
+    fs::current_path(td.dir, ec);
+    if (ec)
+        return;
+
+    CHECK(rodar_config({"config", "--local", "set", "maquina", "HOST-LOCAL"}) == EXIT_SUCCESS);
+    CHECK(fs::exists(td.dir / ".invpush.conf"));
+
+    const NivelConfig lido = carregar_nivel(td.dir / ".invpush.conf");
+    const auto *v = lido.busca("maquina");
+    CHECK(v != nullptr);
+    if (v == nullptr)
+        return;
+    CHECK((*v)[0] == "HOST-LOCAL");
+    CHECK(descobrir_config_local(td.dir) == td.dir / ".invpush.conf");
+
+    fs::current_path(original, ec);
+
+#ifdef _WIN32
+    _putenv_s("INVPUSH_CONFIG_HOME", "");
+#else
+    unsetenv("INVPUSH_CONFIG_HOME");
+#endif
+}
+
 int main()
 {
     return tests::run_all();

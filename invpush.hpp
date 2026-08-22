@@ -13,8 +13,10 @@
 #ifndef INVPUSH_HPP
 #define INVPUSH_HPP
 
+#include <filesystem>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace invpush
@@ -55,6 +57,16 @@ struct Config
     bool debug = false;      // -d/--debug: dumpa payload/resposta crua
     bool ajuda = false;
     bool versao = false;
+
+    // Opções efetivamente fornecidas na linha de comando (precedência
+    // CLI > config local > config global > env > padrões).
+    bool cli_url = false;
+    bool cli_token = false;
+    bool cli_maquina = false;
+    bool cli_timeout = false;
+    bool cli_janela_boot = false;
+    bool cli_ip_publico = false;
+    bool cli_verificar_tls = false;
 };
 
 // Resultado de uma requisição HTTP.
@@ -110,6 +122,48 @@ ResultadoEnvio enviar(const Config &cfg, const std::string &payload);
 
 // Orquestração principal (retorna código de saída do processo).
 int run(Config cfg);
+
+// ------------------------- configuração persistente ------------------------
+
+// Nível de configuração: conjunto ordenado de chaves com valores múltiplos.
+struct NivelConfig
+{
+    std::vector<std::pair<std::string, std::vector<std::string>>> entradas;
+
+    bool vazia() const;
+    const std::vector<std::string> *busca(const std::string &chave) const;
+    void define(const std::string &chave, std::vector<std::string> valores);
+    void acrescenta(const std::string &chave, const std::vector<std::string> &valores);
+    void remove(const std::string &chave);
+};
+
+// Chaves aceitas no arquivo de configuração.
+bool chave_valida(const std::string &chave);
+
+// Converte "true/1/sim/yes/on" (e negações) para bool; fora disso usa o padrão.
+bool valor_bool(const std::string &valor, bool padrao);
+
+// Global: $INVPUSH_CONFIG_HOME/invpush/config (teste/sandbox) ou o diretório
+// de config do usuário ($XDG_CONFIG_HOME|~/.config; %APPDATA% no Windows).
+std::filesystem::path caminho_config_global();
+
+// Local: primeiro arquivo `.invpush.conf` a partir de `inicio` subindo até a
+// raiz. Retorna caminho vazio se não houver.
+std::filesystem::path descobrir_config_local(const std::filesystem::path &inicio);
+
+NivelConfig carregar_nivel(const std::filesystem::path &arquivo);
+bool salvar_nivel(const std::filesystem::path &arquivo, const NivelConfig &nivel);
+
+// Local sobrepõe global por chave inteira (estilo git).
+NivelConfig mesclar_niveis(const NivelConfig &global, const NivelConfig &local);
+
+// Preenche em `cfg` as opções NÃO fornecidas na CLI (aplicar após apply_env:
+// config vence env; CLI vence tudo via flags cli_*).
+void aplicar_config(Config &cfg, const NivelConfig &efetivo);
+
+// Subcomando `invpush config [get|set|add|unset|list|path]` — retorna código
+// de saída. Escrita via --global (padrão) ou --local.
+int comando_config(int argc, char *argv[]);
 
 } // namespace invpush
 

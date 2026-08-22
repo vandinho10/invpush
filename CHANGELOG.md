@@ -4,6 +4,34 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-22
+
+### Adicionado
+
+- **Configuração persistente** (estilo `git config`): subcomando `invpush config`
+  com verbos `list` (padrão), `get`, `set`, `add`, `unset` e `path`, escopos
+  `--global` (padrão) e `--local`.
+- Dois níveis de arquivo: global em
+  `$XDG_CONFIG_HOME/invpush/config` (`%APPDATA%\invpush\config.txt` no Windows)
+  e local `.invpush.conf` descoberto subindo a hierarquia de diretórios a partir
+  do cwd (commitável por design; oculto também no Windows via atributo hidden).
+- Precedência: **CLI > local > global > env (`INVENTORY_API_URL`,
+  `INVENTORY_COLLECTION_API_TOKEN`) > padrões**. Opções não fornecidas na CLI
+  são preenchidas pela config, que por sua vez vence o ambiente — adoção
+  progressiva sem quebrar deploys existentes baseados em env.
+- Chaves suportadas: `url`, `token`, `maquina`, `ip-publico`, `timeout`,
+  `janela-boot`, `verificar-tls`. O token fica em texto puro no arquivo
+  (mesmo modelo do `git credentials`); aviso incluído no cabeçalho gerado.
+- Gravação atômica (tmp + rename), formato `chave=valor` (uma linha por valor,
+  comentários com `#`), avisos para linhas/chaves/valores numéricos inválidos.
+- Variável `INVPUSH_CONFIG_HOME` para redirecionar o nível global (sandbox/testes).
+- 12 novos testes (roundtrip, precedência CLI×config, walk-up, ciclo
+  set→get→unset, `--local`, timeout/janela inválidos etc.).
+
+### Alterado
+
+- Versão do binário: `1.1.0`.
+
 ## [1.0.0] - 2026-08-21
 
 ### Added

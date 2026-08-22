@@ -4,7 +4,7 @@ WARN     := -Wall -Wextra -Wpedantic
 OPTFLAGS := -O2
 DBGFLAGS := -O0 -g
 
-VERSION  := 1.0.0
+VERSION  := 1.1.0
 TARGET   := invpush
 TESTBIN  := tests/test_runner
 TESTBIN_SAN := tests/test_runner_san
@@ -23,7 +23,7 @@ endif
 
 CXXFLAGS := $(STD) $(WARN)
 
-SRCS := main.cpp invpush.cpp
+SRCS := main.cpp invpush.cpp config.cpp
 
 .PHONY: all check test sanitize version install clean
 
@@ -37,15 +37,15 @@ check:
 	$(CXX) $(CXXFLAGS) -Werror -fsyntax-only $(SRCS)
 	@echo "verificacao ok (zero warnings)"
 
-$(TESTBIN): tests/invpush_tests.cpp invpush.cpp invpush.hpp tests/test_framework.hpp
-	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -I. -DINVPUSH_VERSION=\"$(VERSION)\" -o $@ tests/invpush_tests.cpp invpush.cpp $(LIBS)
+$(TESTBIN): tests/invpush_tests.cpp invpush.cpp config.cpp invpush.hpp tests/test_framework.hpp
+	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -I. -DINVPUSH_VERSION=\"$(VERSION)\" -o $@ tests/invpush_tests.cpp invpush.cpp config.cpp $(LIBS)
 
 test: $(TESTBIN)
 	./$(TESTBIN)
 
 # Build com sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)
-$(TESTBIN_SAN): tests/invpush_tests.cpp invpush.cpp invpush.hpp tests/test_framework.hpp
-	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -I. -fsanitize=address,undefined -fno-omit-frame-pointer -DINVPUSH_VERSION=\"$(VERSION)\" -o $@ tests/invpush_tests.cpp invpush.cpp $(LIBS)
+$(TESTBIN_SAN): tests/invpush_tests.cpp invpush.cpp config.cpp invpush.hpp tests/test_framework.hpp
+	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -I. -fsanitize=address,undefined -fno-omit-frame-pointer -DINVPUSH_VERSION=\"$(VERSION)\" -o $@ tests/invpush_tests.cpp invpush.cpp config.cpp $(LIBS)
 
 sanitize: $(TESTBIN_SAN)
 	./$(TESTBIN_SAN)
