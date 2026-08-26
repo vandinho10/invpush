@@ -1,16 +1,5 @@
 # TODO — invpush
 
-## Feito
-
-- [x] Coleta POSIX (getifaddrs) e Windows (GetAdaptersAddresses)
-- [x] Classificação fiel ao ipaddress do Python
-- [x] Geração de payload JSON com escape próprio
-- [x] Transporte libcurl (POSIX) / WinHTTP estático (Windows)
-- [x] CLI completa + resolução env > flags
-- [x] Detecção de modo boot/normal por uptime
-- [x] Suíte de testes + sanitizers + check -Werror
-- [x] cross.sh multiplataforma + release.yml
-
 ## Próximo
 
 - [ ] Validar coleta real no servidor ARM64 e no desktop Windows
