@@ -19,8 +19,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
   cria o `invpush-update.timer` (diário).
 - CI: a release publica `SHA256SUMS`.
 
+### Corrigido
+
+- **Segurança**: `invpush config set` gravava o arquivo de configuração (que
+  guarda o token em texto puro) com `0644`, legível por outros usuários da
+  máquina. Agora o arquivo nasce `0600` antes de receber conteúdo. Arquivos
+  já existentes são corrigidos no próximo `config set`, ou com
+  `chmod 600 ~/.config/invpush/config`.
+
 ### Alterado
 
+- CI: actions do `release.yml` fixadas por SHA de commit (tag na versão do
+  comentário), para a release não depender de tags mutáveis de terceiros.
+- Binário `invpush-linux-aarch64` removido do repositório (`.gitignore`
+  passa a cobrir `invpush-linux-*`).
 - `make install` instala em `~/.local/bin` por padrão (`BINDIR` muda o destino).
 - Builds Windows com `-Wl,--no-insert-timestamp`, para hashes reprodutíveis.
 
