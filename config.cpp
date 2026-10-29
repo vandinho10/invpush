@@ -230,6 +230,14 @@ bool salvar_nivel(const std::filesystem::path &arquivo, const NivelConfig &nivel
         std::ofstream out(temporario, std::ios::trunc);
         if (!out.is_open())
             return false;
+        // O token fica em texto puro: restringe ao dono antes de gravar qualquer
+        // conteúdo (o umask padrão deixaria 0644, legível por outros usuários).
+        std::filesystem::permissions(temporario,
+                                     std::filesystem::perms::owner_read |
+                                         std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::replace, ec);
+        if (ec)
+            return false;
         out << "# invpush — configuracao persistente\n";
         out << "# edite a mao ou use: invpush config set|add|unset [--global|--local]\n";
         out << "# atencao: token e armazenado em texto puro (como git credentials)\n";
