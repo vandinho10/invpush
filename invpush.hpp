@@ -92,6 +92,9 @@ std::string detectar_modo(long uptime_s, int janela_boot_s);
 // Consulta o IP público de saída (api.ipify.org, 3 s); falha => "Indisponível".
 std::string obter_ip_publico();
 
+// GET HTTPS com TLS verificado (usado pelo `invpush update`); falha => vazio + erro.
+std::string http_get(const std::string &url, int timeout_s, std::string &erro);
+
 // Log com timestamp no formato do legado: [YYYY-MM-DD HH:MM:SS] mensagem.
 std::string agora_log();
 void log_info(const std::string &msg);

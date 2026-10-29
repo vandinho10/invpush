@@ -789,50 +789,59 @@ ResultadoEnvio enviar(const Config &cfg, const std::string &payload)
     return r;
 }
 
-std::string obter_ip_publico()
+// GET com TLS verificado; status fora de 2xx => corpo vazio + erro.
+std::string http_get(const std::string &url, int timeout_s, std::string &erro)
 {
     (void)wsa();
     URL_COMPONENTS uc{};
     uc.dwStructSize = sizeof(uc);
-    const std::wstring wurl = wide_utf8(kIpifyUrl);
+    const std::wstring wurl = wide_utf8(url);
     std::wstring host, caminho;
     uc.dwHostNameLength = 1;
     uc.dwUrlPathLength = 1;
+    uc.dwExtraInfoLength = 1;
     if (!WinHttpCrackUrl(wurl.c_str(), static_cast<DWORD>(wurl.size()), 0, &uc))
     {
-        return "Indisponível";
+        erro = "URL invalida";
+        return {};
     }
     host.assign(uc.lpszHostName, uc.dwHostNameLength);
     caminho.assign(uc.lpszUrlPath ? uc.lpszUrlPath : L"/", uc.dwUrlPathLength);
+    if (uc.lpszExtraInfo != nullptr) caminho.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
 
     HINTERNET sessao = WinHttpOpen(L"invpush/" L"", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (sessao == nullptr) return "Indisponível";
-    std::string saida = "Indisponível";
+    if (sessao == nullptr)
+    {
+        erro = "falha WinHttpOpen (" + std::to_string(GetLastError()) + ")";
+        return {};
+    }
+    std::string saida;
 
     HINTERNET conexao = WinHttpConnect(sessao, host.c_str(), uc.nPort, 0);
     HINTERNET req = nullptr;
     do
     {
-        if (conexao == nullptr) break;
+        if (conexao == nullptr) { erro = "falha WinHttpConnect"; break; }
         req = WinHttpOpenRequest(conexao, L"GET", caminho.c_str(), nullptr,
                                  WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                 WINHTTP_FLAG_SECURE);
-        if (req == nullptr) break;
-        WinHttpSetTimeouts(req, kIpifyTimeoutS * 1000, kIpifyTimeoutS * 1000,
-                           kIpifyTimeoutS * 1000, kIpifyTimeoutS * 1000);
+                                 uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0);
+        if (req == nullptr) { erro = "falha WinHttpOpenRequest"; break; }
+        WinHttpSetTimeouts(req, timeout_s * 1000, timeout_s * 1000,
+                           timeout_s * 1000, timeout_s * 1000);
         if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                WINHTTP_NO_REQUEST_DATA, 0, 0, 0))
+                                WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+            !WinHttpReceiveResponse(req, nullptr))
         {
+            erro = "falha na requisicao (" + std::to_string(GetLastError()) + ")";
             break;
         }
-        if (!WinHttpReceiveResponse(req, nullptr)) break;
 
         DWORD codigo = 0, tam = sizeof(codigo);
         WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                             WINHTTP_HEADER_NAME_BY_INDEX, &codigo, &tam,
                             WINHTTP_NO_HEADER_INDEX);
-        if (codigo != 200) break;
+        if (codigo < 200 || codigo >= 300) { erro = "HTTP " + std::to_string(codigo); break; }
 
         std::string corpo;
         for (;;)
@@ -844,13 +853,20 @@ std::string obter_ip_publico()
             if (!WinHttpReadData(req, chunk.data(), disponivel, &lido) || lido == 0) break;
             corpo.append(chunk.data(), lido);
         }
-        if (!corpo.empty()) saida = corpo;
+        saida = std::move(corpo);
     } while (false);
 
     if (req != nullptr) WinHttpCloseHandle(req);
     if (conexao != nullptr) WinHttpCloseHandle(conexao);
     WinHttpCloseHandle(sessao);
     return saida;
+}
+
+std::string obter_ip_publico()
+{
+    std::string erro;
+    const std::string corpo = http_get(kIpifyUrl, kIpifyTimeoutS, erro);
+    return corpo.empty() ? "Indisponível" : corpo;
 }
 
 #else
@@ -974,6 +990,32 @@ std::string obter_ip_publico()
         return corpo;
     }
     return "Indisponível";
+}
+
+std::string http_get(const std::string &url, int timeout_s, std::string &erro)
+{
+    static const bool global_ok = [] { return curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK; }();
+    if (!global_ok)
+    {
+        erro = "falha ao inicializar libcurl";
+        return {};
+    }
+    long status = 0;
+    std::string corpo;
+    const char *e = nullptr;
+    const CURLcode res = http_request(nullptr, url.c_str(), nullptr, nullptr, timeout_s, true,
+                                      &status, &corpo, &e);
+    if (res != CURLE_OK)
+    {
+        erro = e != nullptr ? e : "erro curl";
+        return {};
+    }
+    if (status < 200 || status >= 300)
+    {
+        erro = "HTTP " + std::to_string(status);
+        return {};
+    }
+    return corpo;
 }
 
 #endif
