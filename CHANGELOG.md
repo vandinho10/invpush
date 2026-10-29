@@ -4,6 +4,26 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-29
+
+### Adicionado
+
+- **`invpush update`**: autoatualização pela última release do GitHub
+  (`update check` retorna 0/2/1). SHA256 obrigatório contra o `SHA256SUMS` da
+  release, backup `.old` e rollback automático se o novo binário não
+  responder a `--version`. Módulo `selfupdate` compartilhado com getip e
+  ddns_manager.
+- `http_get()` público (libcurl/WinHTTP, TLS verificado); `obter_ip_publico()`
+  passa a usá-lo no Windows.
+- `scripts/install.sh`: instala em `~/.local/bin` conferindo o `SHA256SUMS` e
+  cria o `invpush-update.timer` (diário).
+- CI: a release publica `SHA256SUMS`.
+
+### Alterado
+
+- `make install` instala em `~/.local/bin` por padrão (`BINDIR` muda o destino).
+- Builds Windows com `-Wl,--no-insert-timestamp`, para hashes reprodutíveis.
+
 ## [1.1.0] - 2026-08-22
 
 ### Adicionado

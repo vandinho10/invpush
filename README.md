@@ -138,6 +138,23 @@ Linux (cron):
 Windows (Agendador de Tarefas): aponte a ação para `invpush.exe` com as
 variáveis de ambiente definidas na conta de serviço.
 
+## Atualização
+
+```bash
+invpush update check   # 0 = atualizado, 2 = há versão nova, 1 = erro
+invpush update         # pergunta antes de instalar
+invpush update --quiet # sem perguntas; usado pelo invpush-update.timer
+```
+
+O binário só é trocado depois de conferir o SHA256 contra o `SHA256SUMS` da
+release (release sem esse arquivo é recusada); o anterior fica em
+`invpush.old` e volta sozinho se o novo não responder a `--version`.
+`scripts/install.sh` instala em `~/.local/bin` e cria o timer diário.
+`INVPUSH_UPDATE_REPO=owner/repo` troca a origem.
+
+> A API de releases só responde sem autenticação para repositórios públicos.
+> Enquanto este repositório for privado, `invpush update` retorna `HTTP 404`.
+
 ## Documentação
 
 Detalhes técnicos, arquitetura e contrato da API: [docs/README.md](docs/README.md).

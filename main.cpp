@@ -1,4 +1,5 @@
 #include "invpush.hpp"
+#include "selfupdate.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -10,6 +11,20 @@ int main(int argc, char *argv[])
     // Subcomando de configuração persistente (estilo git config).
     if (argc > 1 && std::string(argv[1]) == "config")
         return invpush::comando_config(argc, argv);
+
+    // Autoatualização via GitHub Releases (SHA256 obrigatório).
+    if (argc > 1 && std::string(argv[1]) == "update")
+    {
+        selfupdate::Contexto ctx;
+        ctx.app = "invpush";
+        ctx.versao = INVPUSH_VERSION;
+        ctx.repo_padrao = "vandinho10/invpush";
+        ctx.env_repo = "INVPUSH_UPDATE_REPO";
+        ctx.http_get = [](const std::string &url, std::string &erro) {
+            return invpush::http_get(url, 120, erro);
+        };
+        return selfupdate::comando_update(ctx, argc, argv, 2);
+    }
 
     invpush::Config cfg;
     if (!invpush::parse_args(argc, argv, cfg))
