@@ -312,6 +312,20 @@ TEST("carregar_nivel: formato chave=valor, comentarios e lixo ignorado")
         CHECK(valor_bool((*v)[0], true) == false);
 }
 
+#ifndef _WIN32
+TEST("salvar_nivel grava a config (com token) so para o dono")
+{
+    TempDirCfg td;
+    NivelConfig n;
+    n.define("token", {"TOKEN_FICTICIO"});
+    CHECK(salvar_nivel(td.dir / "cfg", n));
+    const auto p = std::filesystem::status(td.dir / "cfg").permissions();
+    using P = std::filesystem::perms;
+    CHECK((p & (P::group_all | P::others_all)) == P::none);
+    CHECK((p & P::owner_read) != P::none);
+}
+#endif
+
 TEST("salvar/carregar roundtrip deterministico com valor contendo '='")
 {
     TempDirCfg td;

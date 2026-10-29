@@ -152,9 +152,6 @@ release (release sem esse arquivo é recusada); o anterior fica em
 `scripts/install.sh` instala em `~/.local/bin` e cria o timer diário.
 `INVPUSH_UPDATE_REPO=owner/repo` troca a origem.
 
-> A API de releases só responde sem autenticação para repositórios públicos.
-> Enquanto este repositório for privado, `invpush update` retorna `HTTP 404`.
-
 ## Documentação
 
 Detalhes técnicos, arquitetura e contrato da API: [docs/README.md](docs/README.md).

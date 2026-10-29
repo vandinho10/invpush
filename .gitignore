@@ -1,6 +1,6 @@
 # Binários compilados
 /invpush
-invpush-linux-x86_64
+invpush-linux-*
 
 # Binários de teste
 tests/test_runner
